@@ -1,0 +1,208 @@
+import requests
+import tarfile
+import os
+import pandas as pd
+from BagOfWords import BagOfWords
+import tensorflow as tf
+
+class MovieReview:
+    def __init__(self):
+        self.bag_of_words = BagOfWords(extra_stopwords=["movie", "film", "br", "one"])
+        self.model = None
+
+    def fit(self, use_saved_model: bool = True) -> None:
+        """Fits the model on the training data"""
+        if not os.path.exists("train_pos.csv") or not os.path.exists("train_neg.csv"):
+            self._download_imdb_data()
+            self._create_imdb_csv()
+            self._create_bag_of_words()
+
+        if use_saved_model and os.path.exists("trained_model.keras"):
+            self.model = tf.keras.models.load_model("trained_model.keras")
+            return
+
+        train_data = pd.concat(
+            [pd.read_csv("train_pos.csv", encoding="utf-8"),
+            pd.read_csv("train_neg.csv", encoding="utf-8")]
+        )
+        test_data = pd.concat(
+            [pd.read_csv("test_pos.csv", encoding="utf-8"),
+            pd.read_csv("test_neg.csv", encoding="utf-8")]
+        )
+
+        print(train_data.head())
+        print(test_data.head())
+
+        X_train, y_train = train_data["content"], train_data["target"]
+        X_test, y_test = test_data["content"], test_data["target"]
+
+        model = tf.keras.Sequential(
+            [
+                tf.keras.layers.Embedding(
+                    input_dim=self.bag_of_words.vocabulary_size,
+                    output_dim=128,
+                    input_length=self.bag_of_words.output_sequence_length,
+                    mask_zero=True,
+                ),
+                tf.keras.layers.LSTM(128, return_sequences=True),
+                tf.keras.layers.LSTM(64),
+                tf.keras.layers.Dense(10, activation="softmax"),
+            ]
+        )
+
+        model.compile(
+            loss="sparse_categorical_crossentropy", optimizer="adam", metrics=["accuracy"]
+        )
+        model.fit(
+            X_train,
+            y_train,
+            epochs=1000,
+            validation_split=0.2,
+            shuffle=True,
+            verbose=2,
+            batch_size=128,
+            callbacks=[tf.keras.callbacks.EarlyStopping(patience=3)],
+            validation_data=(X_test, y_test),
+        )
+        model.save("trained_model.keras")
+        self.model = model
+
+    def predict(self, text: str) -> int:
+        """Predicts the sentiment of the given text
+        Args:
+            text (str): The text to predict the sentiment for
+        Returns:
+            int: The predicted sentiment score
+        """
+        if self.model is None:
+            raise ValueError("Model has not been trained yet. Call fit() first.")
+
+        bag_of_words = self.bag_of_words.bag(text)
+
+        prediction = self.model.predict(bag_of_words)
+        return prediction
+
+    def _create_bag_of_words(self) -> None:
+        """Creates a bag of words from the training data
+        Args:
+            percentage (float): Percentage of the training data to use for creating the bag of words
+        """
+        if os.path.exists("train_pos.csv"):
+            df = pd.read_csv("train_pos.csv", encoding="utf-8")
+            self.bag_of_words.adapt(df["content"])
+
+        if os.path.exists("train_neg.csv"):
+            df = pd.read_csv("train_neg.csv", encoding="utf-8")
+            self.bag_of_words.adapt(df["content"])
+
+    def _download_imdb_data(self, dir_dest_path: str = "aclImdb") -> None:
+        """Downloads and extracts Imdb data
+        Args:
+            dir_dest_path (str): Destination path for the extracted data
+        """
+        if not os.path.exists("aclImdb_v1.tar.gz"):
+            response = requests.get(
+                "https://ai.stanford.edu/~amaas/data/sentiment/aclImdb_v1.tar.gz"
+            )
+            if response.status_code == 200:
+                with open("aclImdb_v1.tar.gz", "wb") as f:
+                    f.write(response.content)
+            else:
+                print("Failed to download data.")
+                return
+
+        if not os.path.exists(dir_dest_path):
+            with tarfile.open("aclImdb_v1.tar.gz", "r:gz") as tar:
+                members = [
+                    member
+                    for member in tar.getmembers()
+                    if member.name.startswith(f"{dir_dest_path}/train/")
+                    or member.name.startswith(f"{dir_dest_path}/test/")
+                    or member.name.startswith(f"{dir_dest_path}/README")
+                ]
+                tar.extractall(members=members)
+
+    def _create_imdb_csv(self, dir_source_path: str = "aclImdb") -> None:
+        """Processes the Imdb data into train and test CSV files
+        Args:
+            dir_source_path (str): Source path for the extracted data
+        """
+        if not os.path.exists("train_pos.csv"):
+            train_pos_files = os.listdir(
+                os.path.join(f"{dir_source_path}", "train", "pos")
+            )
+
+            with open("train_pos.csv", "w", encoding="utf-8") as out_f:
+                out_f.write("target,content\n")
+
+            for file in train_pos_files:
+                source_train_pos_file = os.path.join(
+                    f"{dir_source_path}", "train", "pos", file
+                )
+                with open(source_train_pos_file, "r", encoding="utf-8") as in_f:
+                    with open("train_pos.csv", "a", encoding="utf-8") as out_f:
+                        target = file[:-4].split("_")[1]
+                        content = in_f.read()
+                        out_f.write(f"{target},{content}\n")
+
+        if not os.path.exists("train_neg.csv"):
+            train_neg_files = os.listdir(
+                os.path.join(f"{dir_source_path}", "train", "neg")
+            )
+
+            with open("train_neg.csv", "w", encoding="utf-8") as out_f:
+                out_f.write("target,content\n")
+
+            for file in train_neg_files:
+                source_train_neg_file = os.path.join(
+                    f"{dir_source_path}", "train", "neg", file
+                )
+                with open(source_train_neg_file, "r", encoding="utf-8") as in_f:
+                    with open("train_neg.csv", "a", encoding="utf-8") as out_f:
+                        target = file[:-4].split("_")[1]
+                        content = in_f.read()
+                        out_f.write(f"{target},{content}\n")
+
+        if not os.path.exists("test_pos.csv"):
+            test_pos_files = os.listdir(
+                os.path.join(f"{dir_source_path}", "test", "pos")
+            )
+
+            with open("test_pos.csv", "w", encoding="utf-8") as out_f:
+                out_f.write("target,content\n")
+
+            for file in test_pos_files:
+                source_test_pos_file = os.path.join(
+                    f"{dir_source_path}", "test", "pos", file
+                )
+                with open(source_test_pos_file, "r", encoding="utf-8") as in_f:
+                    with open("test_pos.csv", "a", encoding="utf-8") as out_f:
+                        target = file[:-4].split("_")[1]
+                        content = in_f.read()
+                        out_f.write(f"{target},{content}\n")
+
+        if not os.path.exists("test_neg.csv"):
+            test_neg_files = os.listdir(
+                os.path.join(f"{dir_source_path}", "test", "neg")
+            )
+
+            with open("test_neg.csv", "w", encoding="utf-8") as out_f:
+                out_f.write("target,content\n")
+
+            for file in test_neg_files:
+                source_test_neg_file = os.path.join(
+                    f"{dir_source_path}", "test", "neg", file
+                )
+                with open(source_test_neg_file, "r", encoding="utf-8") as in_f:
+                    with open("test_neg.csv", "a", encoding="utf-8") as out_f:
+                        target = file[:-4].split("_")[1]
+                        content = in_f.read()
+                        out_f.write(f"{target},{content}\n")
+
+
+if __name__ == "__main__":
+    movie_review = MovieReview()
+    movie_review.fit()
+    p = movie_review.predict("This movie was fantastic! I loved it.")
+    print(p)
+    # print(movie_review.bag_of_words.empty())  # Should return an empty dictionary
