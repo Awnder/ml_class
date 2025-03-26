@@ -3,10 +3,22 @@ import pandas as pd
 import torch
 from sklearn.model_selection import train_test_split
 
+class MushroomClassifierNN(torch.nn.Module):
+    def __init__(self, input_dim, hidden_dim, output_dim):
+        super(MushroomClassifierNN, self).__init__()
+        self.fc1 = torch.nn.Linear(input_dim, hidden_dim)
+        self.relu = torch.nn.ReLU()
+        self.fc2 = torch.nn.Linear(hidden_dim, output_dim)
+
+    def forward(self, x):
+        out = self.fc1(x)
+        out = self.relu(out)
+        out = self.fc2(out)
+        return out
+    
 class MushroomClassifier:
     def __init__(self):
         self.X, self.y = self._load_data()
-        self.model_reports = []
 
     def _load_data(self) -> tuple[pd.DataFrame, pd.DataFrame]:
         """Loads the mushroom dataset."""
@@ -18,7 +30,7 @@ class MushroomClassifier:
 
         return X, y
     
-    def _preprocess_data(self) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    def _preprocess_data(self) -> tuple[torch.utils.data.TensorDataset, torch.utils.data.TensorDataset, int]:
         """Preprocesses the data."""
         X_train = self.X[:6000]
         X_test = self.X[6000:]
@@ -69,30 +81,51 @@ class MushroomClassifier:
 
         X_train = X_train[:, mask]
         X_test = X_test[:, mask]
+
+        train_dataset = torch.utils.data.TensorDataset(X_train, y_train)
+        test_dataset = torch.utils.data.TensorDataset(X_test, y_test)
      
-        return X_train, X_test, y_train, y_test
-
-    def fit_predict(self) -> None:
-        """Fits the model and makes predictions."""
-        X_train, X_test, y_train, y_test = self._preprocess_data()
-
-        mcnn = MushroomClassifierNN(input_dim=X_train.shape[1], hidden_dim=100, output_dim=2)
+        return train_dataset, test_dataset, X_train.shape[1]
     
+    def fit_predict(self, num_epochs: int = 100) -> None:
+        """Fits the model and makes predictions."""
+        train_dataset, test_dataset, input_dim = self._preprocess_data()
+        
+        train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=32)
+        test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=32)
+
+        mcnn = MushroomClassifierNN(input_dim=input_dim, hidden_dim=100, output_dim=2)
+        criterion = torch.nn.CrossEntropyLoss()
+        optimizer = torch.optim.Adam(mcnn.parameters(), lr=0.001)
+
+        for epoch in range(num_epochs):
+            mcnn.train()
+
+            for batch_idx, (inputs, targets) in enumerate(train_loader):
+                outputs = mcnn(inputs.float())
+                loss = criterion(outputs, targets)
+
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+
+                print(f"Epoch: {epoch+1}, Batch: {batch_idx+1}, Loss: {loss.item():.2f}")
+                
+        mcnn.eval()
+        correct = 0
+        total = 0
+        for inputs, targets in test_loader:
+            outputs = mcnn(inputs.float())
+            _, predicted = torch.max(outputs.data, 1)
+            total += targets.size(0)
+            correct += (predicted == targets).sum().item()
+
+        accuracy = correct / total
+        print(f"Accuracy: {accuracy:.2f}%")
+
+
 if __name__ == "__main__":
     mc = MushroomClassifier()
     mc._load_data()
     mc._preprocess_data()
-
-
-class MushroomClassifierNN(torch.nn.Module):
-    def __init__(self, input_dim, hidden_dim, output_dim):
-        super(MushroomClassifierNN, self).__init__()
-        self.fc1 = torch.nn.Linear(input_dim, hidden_dim)
-        self.relu = torch.nn.ReLU()
-        self.fc2 = torch.nn.Linear(hidden_dim, output_dim)
-
-    def forward(self, x):
-        out = self.fc1(x)
-        out = self.relu(out)
-        out = self.fc2(out)
-        return out
+    mc.fit_predict()
