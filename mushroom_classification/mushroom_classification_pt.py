@@ -1,7 +1,6 @@
 import numpy as np
 import pandas as pd
 import torch
-from sklearn.model_selection import train_test_split
 
 class MushroomClassifierNN(torch.nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim):
@@ -18,6 +17,7 @@ class MushroomClassifierNN(torch.nn.Module):
     
 class MushroomClassifier:
     def __init__(self):
+        self.mcnn = None
         self.X, self.y = self._load_data()
 
     def _load_data(self) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -30,7 +30,7 @@ class MushroomClassifier:
 
         return X, y
     
-    def _preprocess_data(self) -> tuple[torch.utils.data.TensorDataset, torch.utils.data.TensorDataset, int]:
+    def preprocess_data(self) -> tuple[torch.utils.data.TensorDataset, torch.utils.data.TensorDataset, int]:
         """Preprocesses the data."""
         X_train = self.X[:6000]
         X_test = self.X[6000:]
@@ -87,45 +87,52 @@ class MushroomClassifier:
      
         return train_dataset, test_dataset, X_train.shape[1]
     
-    def fit_predict(self, num_epochs: int = 100) -> None:
-        """Fits the model and makes predictions."""
-        train_dataset, test_dataset, input_dim = self._preprocess_data()
-        
-        train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=32)
-        test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=32)
-
-        mcnn = MushroomClassifierNN(input_dim=input_dim, hidden_dim=100, output_dim=2)
+    def fit(self, train_loader: torch.utils.data.DataLoader, num_epochs: int = 10) -> None:
+        self.mcnn = MushroomClassifierNN(input_dim=input_dim, hidden_dim=100, output_dim=2)
         criterion = torch.nn.CrossEntropyLoss()
-        optimizer = torch.optim.Adam(mcnn.parameters(), lr=0.001)
+        optimizer = torch.optim.Adam(self.mcnn.parameters(), lr=0.001)
 
         for epoch in range(num_epochs):
-            mcnn.train()
+            self.mcnn.train()
+            running_loss = 0.0
 
             for batch_idx, (inputs, targets) in enumerate(train_loader):
-                outputs = mcnn(inputs.float())
-                loss = criterion(outputs, targets)
+                outputs = self.mcnn(inputs.float())
+                loss = criterion(outputs, torch.argmax(targets, dim=1))
+                running_loss += loss.item() * inputs.size(0)
 
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
 
-                print(f"Epoch: {epoch+1}, Batch: {batch_idx+1}, Loss: {loss.item():.2f}")
-                
-        mcnn.eval()
+                if (batch_idx + 1) % 100 == 0:
+                    epoch_loss = running_loss / len(train_loader.dataset)
+                    print(f"Epoch: {epoch+1}, Loss: {epoch_loss:.2f}")
+                    running_loss = 0.0
+
+    def predict(self, test_loader: torch.utils.data.DataLoader) -> None:
+        self.mcnn.eval()
         correct = 0
         total = 0
         for inputs, targets in test_loader:
-            outputs = mcnn(inputs.float())
-            _, predicted = torch.max(outputs.data, 1)
-            total += targets.size(0)
-            correct += (predicted == targets).sum().item()
+            outputs = self.mcnn(inputs.float())
+            predicted = torch.argmax(outputs, dim=1)
+            true_labels = torch.argmax(targets, dim=1)
+            total += true_labels.size(0)
+            correct += (predicted == true_labels).sum().item()
 
         accuracy = correct / total
         print(f"Accuracy: {accuracy:.2f}%")
 
+    def fit_predict(self, train_loader: torch.utils.data.DataLoader, test_loader: torch.utils.data.DataLoader, num_epochs: int = 10) -> None:
+        """Fits the model and makes predictions."""
+        self.fit(train_loader, num_epochs)
+        self.predict(test_loader)
 
 if __name__ == "__main__":
     mc = MushroomClassifier()
-    mc._load_data()
-    mc._preprocess_data()
-    mc.fit_predict()
+    train_dataset, test_dataset, input_dim = mc.preprocess_data()
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=32, shuffle=True)
+    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=32, shuffle=False)
+
+    mc.fit_predict(train_loader, test_loader, num_epochs=10)
