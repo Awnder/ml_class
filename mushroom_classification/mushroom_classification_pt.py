@@ -133,6 +133,6 @@ if __name__ == "__main__":
     mc = MushroomClassifier()
     train_dataset, test_dataset, input_dim = mc.preprocess_data()
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=32, shuffle=True)
-    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=32, shuffle=False)
+    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=32, shuffle=True)
 
     mc.fit_predict(train_loader, test_loader, num_epochs=10)
