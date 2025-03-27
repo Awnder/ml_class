@@ -1,6 +1,8 @@
 import requests
 import tarfile
 import os
+import re
+import string
 import pandas as pd
 from BagOfWords import BagOfWords
 import tensorflow as tf
@@ -22,26 +24,38 @@ class MovieReview:
             return
 
         train_data = pd.concat(
-            [pd.read_csv("train_pos.csv", encoding="utf-8"),
-            pd.read_csv("train_neg.csv", encoding="utf-8")]
+            [
+            pd.read_csv("train_pos.csv", encoding="utf-8", header=0, names=["raw"]).assign(
+                target=lambda df: df["raw"].str.split("||").str[0],
+                content=lambda df: df["raw"].str.split("||").str[1],
+            ).drop(columns=["raw"]),
+            pd.read_csv("train_neg.csv", encoding="utf-8", header=0, names=["raw"]).assign(
+                target=lambda df: df["raw"].str.split("||").str[0],
+                content=lambda df: df["raw"].str.split("||").str[1],
+            ).drop(columns=["raw"]),
+            ]
         )
         test_data = pd.concat(
-            [pd.read_csv("test_pos.csv", encoding="utf-8"),
-            pd.read_csv("test_neg.csv", encoding="utf-8")]
+            [
+            pd.read_csv("test_pos.csv", encoding="utf-8", header=0, names=["raw"]).assign(
+                target=lambda df: df["raw"].str.split("||").str[0],
+                content=lambda df: df["raw"].str.split("||").str[1],
+            ).drop(columns=["raw"]),
+            pd.read_csv("test_neg.csv", encoding="utf-8", header=0, names=["raw"]).assign(
+                target=lambda df: df["raw"].str.split("||").str[0],
+                content=lambda df: df["raw"].str.split("||").str[1],
+            ).drop(columns=["raw"]),
+            ]
         )
 
-        print(train_data.head())
-        print(test_data.head())
-
-        X_train, y_train = train_data["content"], train_data["target"]
-        X_test, y_test = test_data["content"], test_data["target"]
+        X_train, y_train = train_data["content"], train_data["target"].astype(int)
+        X_test, y_test = test_data["content"], test_data["target"].astype(int)
 
         model = tf.keras.Sequential(
             [
                 tf.keras.layers.Embedding(
                     input_dim=self.bag_of_words.vocabulary_size,
                     output_dim=128,
-                    input_length=self.bag_of_words.output_sequence_length,
                     mask_zero=True,
                 ),
                 tf.keras.layers.LSTM(128, return_sequences=True),
@@ -143,7 +157,7 @@ class MovieReview:
                     with open("train_pos.csv", "a", encoding="utf-8") as out_f:
                         target = file[:-4].split("_")[1]
                         content = in_f.read()
-                        out_f.write(f"{target},{content}\n")
+                        out_f.write(f"{target},{self._clean_text(content)}\n")
 
         if not os.path.exists("train_neg.csv"):
             train_neg_files = os.listdir(
@@ -161,7 +175,7 @@ class MovieReview:
                     with open("train_neg.csv", "a", encoding="utf-8") as out_f:
                         target = file[:-4].split("_")[1]
                         content = in_f.read()
-                        out_f.write(f"{target},{content}\n")
+                        out_f.write(f"{target},{self._clean_text(content)}\n")
 
         if not os.path.exists("test_pos.csv"):
             test_pos_files = os.listdir(
@@ -179,7 +193,7 @@ class MovieReview:
                     with open("test_pos.csv", "a", encoding="utf-8") as out_f:
                         target = file[:-4].split("_")[1]
                         content = in_f.read()
-                        out_f.write(f"{target},{content}\n")
+                        out_f.write(f"{target},{self._clean_text(content)}\n")
 
         if not os.path.exists("test_neg.csv"):
             test_neg_files = os.listdir(
@@ -197,8 +211,16 @@ class MovieReview:
                     with open("test_neg.csv", "a", encoding="utf-8") as out_f:
                         target = file[:-4].split("_")[1]
                         content = in_f.read()
-                        out_f.write(f"{target},{content}\n")
+                        out_f.write(f"{target},{self._clean_text(content)}\n")
 
+    def _clean_text(self, text: str) -> str:
+        text = text.replace("\n", " ").replace("\r", " ")  # remove newlines
+        text = text.translate(
+            str.maketrans("", "", string.punctuation)
+        )  # remove punctuation
+        text = re.compile(r"<[^>]+>").sub("", text)  # remove HTML tags
+        text = text.lower()  # convert to lowercase
+        return text
 
 if __name__ == "__main__":
     movie_review = MovieReview()

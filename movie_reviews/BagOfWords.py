@@ -11,7 +11,7 @@ class BagOfWords:
             max_tokens (int): Maximum vocabulary size
             extra_stopwords (list): Additional stopwords to exclude from the vocabulary
         """
-        self.vocabulary = defaultdict(int)
+        self.vocabulary = {}
         self.stopwords = set(stopwords.words("english")).union(set(extra_stopwords))
         self.vocabulary_size = vocabulary_size
         self.output_sequence_length = output_sequence_length
@@ -30,12 +30,11 @@ class BagOfWords:
                 if word in self.stopwords:
                     continue
 
-                self.vocabulary[word] += 1
+                self.vocabulary.get(word, 0) + 1
 
         self.vocabulary = self.vocabulary.sorted(key=lambda item: item[1], reverse=True)[:self.vocabulary_size]
         self.vocabulary = self.vocabulary.insert(0, '<unk>')  # add unknown token at index 1
         self.vocabulary = self.vocabulary.insert(0, '')  # add padding token at index 0
-        print(self.vocabulary[:10])
 
     def bag(self, data: str) -> dict:
         """Transforms text into integer sequences
