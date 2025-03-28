@@ -9,6 +9,12 @@ import torch
 
 class MovieReviewNN(torch.nn.Module):
     def __init__(self, input_dim, hidden_dim=128, output_dim=11):
+        """Initialized Movie Review Neural Network
+        Args:
+            input_dim (int): The size of the input vocabulary
+            hidden_dim (int, optional): The number of hidden units in the LSTM layers. Defaults to 128.
+            output_dim (int, optional): The number of output classes. Defaults to 11 for 0-10 sentiment classification.
+        """
         super(MovieReviewNN, self).__init__()
         self.embedding = torch.nn.Embedding(input_dim, 128)  # Embedding layer for word indices
         self.lstm1 = torch.nn.LSTM(128, hidden_dim)
@@ -36,7 +42,7 @@ class MovieReview:
         """
         if use_saved_model and os.path.exists("trained_model.pt"):
             self.model = MovieReviewNN(input_dim=len(self.bag_of_words.vocabulary))
-            self.model.load_state_dict(torch.load(f="trained_model.pt", weights_only=True))
+            self.model.load_state_dict(torch.load("trained_model.pth"))
             return
         else:
             self.model = MovieReviewNN(input_dim=len(self.bag_of_words.vocabulary))
@@ -63,7 +69,7 @@ class MovieReview:
                     print(f"Epoch: {epoch + 1}, Batch: {batch_idx + 1}, Loss: {epoch_loss:.2f}")
                     running_loss = 0.0  # Reset running loss for the next batch
 
-        torch.save(self.model.state_dict(), "trained_model.pt", weights_only=True)  # Save the trained model state
+        torch.save(self.model.state_dict(), "trained_model.pth")  # Save the trained model state
 
     def predict_text(self, test_text: str) -> int:
         """Predicts the sentiment of a single text input
@@ -279,5 +285,4 @@ if __name__ == "__main__":
     movie_review.fit(train_loader)
     p = movie_review.predict_text(test_text="This movie was fantastic! I loved it.")
     print(p)
-    print(movie_review.bag_of_words.bag(["This movie was fantastic! I loved it."]))
     # movie_review.predict_loader(test_loader)
