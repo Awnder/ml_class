@@ -1,5 +1,4 @@
 from nltk.corpus import stopwords
-from collections import defaultdict
 import pandas as pd
 import string
 import re
@@ -33,12 +32,10 @@ class BagOfWords:
                 self.vocabulary.get(word, 0) + 1
 
         self.vocabulary = self.vocabulary.sorted(key=lambda item: item[1], reverse=True)[:self.vocabulary_size]
-        self.vocabulary = self.vocabulary.insert(0, '<unk>')  # add unknown token at index 1
-        self.vocabulary = self.vocabulary.insert(0, '')  # add padding token at index 0
 
-    def bag(self, data: str) -> dict:
+    def bag(self, data: str) -> list[int]:
         """Transforms text into integer sequences
-        Breaks text into tokens and maps them to their corresponding index values in the vocabulary.
+        Breaks text into tokens and adds a 1 to the bag if it is in the vocabulary.
         Pads the sequences to a fixed length of output_sequence_length. 
         Breaks automatically if the length exceeds output_sequence_length.
         Args:
@@ -51,10 +48,15 @@ class BagOfWords:
         for word in tokens:
             if len(bag) >= self.output_sequence_length:
                 break
-            if word in self.vocabulary and self.vocabulary[word] > 0:
-                bag.append(self.vocabulary.index(word))
+            if word in self.vocabulary:
+                bag.append(1)
             else:
-                bag.append(self.vocabulary.index('<unk>'))
+                bag.append(0)
+
+        if len(bag) < self.output_sequence_length:
+            # pad the sequence with 0s if it's shorter than output_sequence_length
+            bag.extend([0] * (self.output_sequence_length - len(bag)))
+        print('Bag of words:', bag)  # Debugging statement to check the bag of words
         return bag
 
     def empty(self) -> None:

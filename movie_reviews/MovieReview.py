@@ -25,42 +25,37 @@ class MovieReview:
 
         train_data = pd.concat(
             [
-            pd.read_csv("train_pos.csv", encoding="utf-8", header=0, names=["raw"]).assign(
-                target=lambda df: df["raw"].str.split("||").str[0],
-                content=lambda df: df["raw"].str.split("||").str[1],
-            ).drop(columns=["raw"]),
-            pd.read_csv("train_neg.csv", encoding="utf-8", header=0, names=["raw"]).assign(
-                target=lambda df: df["raw"].str.split("||").str[0],
-                content=lambda df: df["raw"].str.split("||").str[1],
-            ).drop(columns=["raw"]),
+                pd.read_csv("train_pos.csv", encoding="utf-8", header=0),
+                pd.read_csv("train_neg.csv", encoding="utf-8", header=0)
             ]
         )
-        test_data = pd.concat(
-            [
-            pd.read_csv("test_pos.csv", encoding="utf-8", header=0, names=["raw"]).assign(
-                target=lambda df: df["raw"].str.split("||").str[0],
-                content=lambda df: df["raw"].str.split("||").str[1],
-            ).drop(columns=["raw"]),
-            pd.read_csv("test_neg.csv", encoding="utf-8", header=0, names=["raw"]).assign(
-                target=lambda df: df["raw"].str.split("||").str[0],
-                content=lambda df: df["raw"].str.split("||").str[1],
-            ).drop(columns=["raw"]),
-            ]
-        )
+        
+        train_target_tensor = tf.convert_to_tensor(train_data["target"].values, dtype=tf.int32)
 
-        X_train, y_train = train_data["content"], train_data["target"].astype(int)
-        X_test, y_test = test_data["content"], test_data["target"].astype(int)
+        train_content_tensor = self.bag_of_words.bag(train_data["content"].values)
+
+        print(train_content_tensor)
+        return
+        # vectorize_layer = tf.keras.layers.TextVectorization(
+        #     max_tokens=1000,
+        #     output_mode='int',
+        #     output_sequence_length=30
+        # )
+        # vectorize_layer.adapt(train_data['content'].values)
+        # train_content_tensor = vectorize_layer(train_data['content'].values)
+        # train_dataset = tf.data.Dataset.from_tensor_slices((train_content_tensor, train_target_tensor))
+        # train_dataset = train_dataset.shuffle(buffer_size=len(train_data)).batch(32)
 
         model = tf.keras.Sequential(
             [
-                tf.keras.layers.Embedding(
-                    input_dim=self.bag_of_words.vocabulary_size,
-                    output_dim=128,
-                    mask_zero=True,
-                ),
-                tf.keras.layers.LSTM(128, return_sequences=True),
-                tf.keras.layers.LSTM(64),
-                tf.keras.layers.Dense(10, activation="softmax"),
+            tf.keras.layers.Embedding(
+                input_dim=vectorize_layer.vocabulary_size(),
+                output_dim=128,
+                mask_zero=True,
+            ),
+            tf.keras.layers.LSTM(128, return_sequences=True),
+            tf.keras.layers.LSTM(64),
+            tf.keras.layers.Dense(11, activation="softmax"),
             ]
         )
 
@@ -68,15 +63,12 @@ class MovieReview:
             loss="sparse_categorical_crossentropy", optimizer="adam", metrics=["accuracy"]
         )
         model.fit(
-            X_train,
-            y_train,
-            epochs=1000,
-            validation_split=0.2,
+            train_dataset,
+            epochs=10,
+            batch_size=32,
             shuffle=True,
             verbose=2,
-            batch_size=128,
             callbacks=[tf.keras.callbacks.EarlyStopping(patience=3)],
-            validation_data=(X_test, y_test),
         )
         model.save("trained_model.keras")
         self.model = model
@@ -225,6 +217,6 @@ class MovieReview:
 if __name__ == "__main__":
     movie_review = MovieReview()
     movie_review.fit()
-    p = movie_review.predict("This movie was fantastic! I loved it.")
-    print(p)
+    # p = movie_review.predict("This movie was fantastic! I loved it.")
+    # print(p)
     # print(movie_review.bag_of_words.empty())  # Should return an empty dictionary
