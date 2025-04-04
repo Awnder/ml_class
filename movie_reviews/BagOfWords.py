@@ -16,11 +16,9 @@ class BagOfWords:
         self.output_sequence_length = output_sequence_length
 
     def adapt(self, data: pd.Series) -> None:
-        """Finds unique words in the training data and stores them by most frequent
+        """Processes the input training data to build a vocabulary of unique words sorted by frequency.
         Args:
-            data (Pandas Series): multiple rows of text data to be processed
-        Returns:
-            dict: A dictionary with words as keys and their frequencies as values
+            data (pd.Series): A Pandas Series containing multiple rows of text data to be processed.
         """
         for text in data:
             tokens = self._tokenize(text)
@@ -29,30 +27,27 @@ class BagOfWords:
                 if word in self.stopwords:
                     continue
 
-                self.vocabulary.get(word, 0) + 1
+                self.vocabulary[word] = self.vocabulary.get(word, 0) + 1
 
-        self.vocabulary = self.vocabulary.sorted(key=lambda item: item[1], reverse=True)[:self.vocabulary_size]
+        # Sort the vocabulary by frequency in descending order and limit to vocabulary_size
+        sorted_vocabulary = sorted(self.vocabulary.items(), key=lambda item: item[1], reverse=True)
+        self.vocabulary = dict(sorted_vocabulary[:self.vocabulary_size])
 
-    def bag(self, data: str) -> list[int]:
-        """Transforms text into integer sequences
-        Breaks text into tokens and adds a 1 to the bag if it is in the vocabulary.
-        Pads the sequences to a fixed length of output_sequence_length. 
-        Breaks automatically if the length exceeds output_sequence_length.
+    def bag(self, data: list) -> list[list[int]]:
+        """Transforms text into integer sequences.
+        For each input text, breaks it into tokens and creates a binary sequence (bag of words).
+        Adds a 1 to the sequence if the token is in the vocabulary, otherwise adds a 0.
+        Pads the sequence with 0s to ensure a fixed length of `output_sequence_length`.
+        Truncates the sequence if it exceeds `output_sequence_length`.
         Args:
-            data (str): input text to be processed
+            data (list): A list of input text strings to be processed.
         Returns:
-            list[int]: A list of list of integers representing the bag of words
+            list[list[int]]: A list of binary sequences, where each sequence represents 
+                the presence (1) or absence (0) of vocabulary words in the corresponding input text.
         """
-        tokens = self._tokenize(data)
-        bag = []
-        for word in tokens:
-            if len(bag) >= self.output_sequence_length:
-                break
-            if word in self.vocabulary:
-                bag.append(1)
-            else:
-                bag.append(0)
+        bag_of_words = []
 
+<<<<<<< HEAD
 <<<<<<< Updated upstream
         if len(bag) < self.output_sequence_length:
             # pad the sequence with 0s if it's shorter than output_sequence_length
@@ -60,6 +55,8 @@ class BagOfWords:
         print('Bag of words:', bag)  # Debugging statement to check the bag of words
         return bag
 =======
+=======
+>>>>>>> 4cf352b39261af82af4ca9d8620fc1c57be12cf9
         for text in data:
             bag = []
             tokens = self._tokenize(text)
@@ -81,6 +78,7 @@ class BagOfWords:
             bag_of_words.append(bag)
 
         return bag_of_words
+<<<<<<< HEAD
     
     # def bag(self, data: str) -> list[int]:
     #     """Transforms a single text into an integer sequence.
@@ -112,6 +110,8 @@ class BagOfWords:
 
     #     return bag
 >>>>>>> Stashed changes
+=======
+>>>>>>> 4cf352b39261af82af4ca9d8620fc1c57be12cf9
 
     def empty(self) -> None:
         """Resets the bag of words to an empty state"""

@@ -8,7 +8,7 @@ from BagOfWords import BagOfWords
 import torch
 
 class MovieReviewNN(torch.nn.Module):
-    def __init__(self, input_dim, hidden_dim=128, output_dim=10):
+    def __init__(self, input_dim, hidden_dim=128, output_dim=11):
         """Initialized Movie Review Neural Network
         Args:
             input_dim (int): The size of the input vocabulary
@@ -83,9 +83,9 @@ class MovieReview:
     def predict_text(self, test_text: str) -> int:
         """Predicts the sentiment of a single text input
         Args:
-            text (str): The text to predict the sentiment for
+            test_text (str): The text to predict sentiment for
         Returns:
-            int: The predicted sentiment score
+            int: The predicted sentiment class (0-10)
         """
         if self.model is None:
             raise ValueError("Model has not been trained yet. Call fit() first.")
