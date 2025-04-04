@@ -160,6 +160,16 @@ class MovieReview:
         y_test = torch.tensor(test_df["target"].values)
 
         # training is [25000, 200] (num of reviews, bag_of_words.output_sequence_length)
+        # looks like strings converted to bag_of_words list of 0/1 
+        # [
+        #     "this movie was great",
+        #     "i hated it",
+        #     ...
+        # [
+        #     [0, 0, 0, 1, 0, ...],
+        #     [0, 1, 0, 0, 0, ...],
+        #     ...
+        # ]
         # y_train is [25000] (num of reviews)
         print('X_train shape', X_train.shape, 'y_train shape', y_train.shape)  # Debugging: print shapes of tensors
         print('X_test shape', X_test.shape, 'y_test shape', y_test.shape)  # Debugging: print shapes of tensors
