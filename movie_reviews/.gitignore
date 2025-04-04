@@ -6,3 +6,5 @@ train_neg.csv
 aclimdb
 
 aclImdb_v1.tar.gz
+
+trained_model.pth
