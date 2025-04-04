@@ -47,16 +47,6 @@ class BagOfWords:
         """
         bag_of_words = []
 
-<<<<<<< HEAD
-<<<<<<< Updated upstream
-        if len(bag) < self.output_sequence_length:
-            # pad the sequence with 0s if it's shorter than output_sequence_length
-            bag.extend([0] * (self.output_sequence_length - len(bag)))
-        print('Bag of words:', bag)  # Debugging statement to check the bag of words
-        return bag
-=======
-=======
->>>>>>> 4cf352b39261af82af4ca9d8620fc1c57be12cf9
         for text in data:
             bag = []
             tokens = self._tokenize(text)
@@ -78,7 +68,6 @@ class BagOfWords:
             bag_of_words.append(bag)
 
         return bag_of_words
-<<<<<<< HEAD
     
     # def bag(self, data: str) -> list[int]:
     #     """Transforms a single text into an integer sequence.
@@ -109,13 +98,6 @@ class BagOfWords:
     #         bag.extend([0] * (self.output_sequence_length - len(bag)))
 
     #     return bag
->>>>>>> Stashed changes
-=======
->>>>>>> 4cf352b39261af82af4ca9d8620fc1c57be12cf9
-
-    def empty(self) -> None:
-        """Resets the bag of words to an empty state"""
-        self.vocabulary.clear()
 
     def _tokenize(self, text: str) -> list:
         """Tokenizes the input text and removes unwanted characters

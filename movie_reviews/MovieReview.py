@@ -14,6 +14,7 @@ class MovieReviewNN(torch.nn.Module):
             input_dim (int): The size of the input vocabulary
             hidden_dim (int, optional): The number of hidden units in the LSTM layers. Defaults to 128.
             output_dim (int, optional): The number of output classes. Defaults to 11 for 0-10 sentiment classification.
+                Actual classes are 1-10, but model outputs 0-9 if set to 10.
         """
         super(MovieReviewNN, self).__init__()
         self.embedding = torch.nn.Embedding(input_dim, 128)  # Embedding layer for word indices
@@ -30,6 +31,7 @@ class MovieReviewNN(torch.nn.Module):
     
 class MovieReview:
     def __init__(self):
+        """Initialized Movie Review Class with a Bag of Words and a neural network"""
         self.bag_of_words = BagOfWords(extra_stopwords=["movie", "film", "br", "one"])
         self.model = None
 
