@@ -53,11 +53,65 @@ class BagOfWords:
             else:
                 bag.append(0)
 
+<<<<<<< Updated upstream
         if len(bag) < self.output_sequence_length:
             # pad the sequence with 0s if it's shorter than output_sequence_length
             bag.extend([0] * (self.output_sequence_length - len(bag)))
         print('Bag of words:', bag)  # Debugging statement to check the bag of words
         return bag
+=======
+        for text in data:
+            bag = []
+            tokens = self._tokenize(text)
+
+            for word in tokens:
+                if len(bag) >= self.output_sequence_length:
+                    break
+                
+                if word in self.vocabulary:
+                    # If the word is in the vocabulary, add 1 to the bag
+                    bag.append(1)
+                else:
+                    bag.append(0)
+
+            if len(bag) < self.output_sequence_length:
+                # If the bag is shorter than output_sequence_length, pad with 0s
+                bag.extend([0] * (self.output_sequence_length - len(bag)))
+
+            bag_of_words.append(bag)
+
+        return bag_of_words
+    
+    # def bag(self, data: str) -> list[int]:
+    #     """Transforms a single text into an integer sequence.
+    #     For the input text, breaks it into tokens and creates a binary sequence (bag of words).
+    #     Adds a 1 to the sequence if the token is in the vocabulary, otherwise adds a 0.
+    #     Pads the sequence with 0s to ensure a fixed length of `output_sequence_length`.
+    #     Truncates the sequence if it exceeds `output_sequence_length`.
+    #     Args:
+    #         data (str): Input text string to be processed.
+    #     Returns:
+    #         list[int]: A binary sequence representing the presence (1) or absence (0) of vocabulary words in the input text.
+    #     """
+    #     bag = []
+    #     tokens = self._tokenize(data)
+
+    #     for word in tokens:
+    #         if len(bag) >= self.output_sequence_length:
+    #             break
+            
+    #         if word in self.vocabulary:
+    #             # If the word is in the vocabulary, add 1 to the bag
+    #             bag.append(1)
+    #         else:
+    #             bag.append(0)
+
+    #     if len(bag) < self.output_sequence_length:
+    #         # If the bag is shorter than output_sequence_length, pad with 0s
+    #         bag.extend([0] * (self.output_sequence_length - len(bag)))
+
+    #     return bag
+>>>>>>> Stashed changes
 
     def empty(self) -> None:
         """Resets the bag of words to an empty state"""

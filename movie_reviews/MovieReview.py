@@ -5,76 +5,83 @@ import re
 import string
 import pandas as pd
 from BagOfWords import BagOfWords
-import tensorflow as tf
+import torch
 
+class MovieReviewNN(torch.nn.Module):
+    def __init__(self, input_dim, hidden_dim=128, output_dim=10):
+        """Initialized Movie Review Neural Network
+        Args:
+            input_dim (int): The size of the input vocabulary
+            hidden_dim (int, optional): The number of hidden units in the LSTM layers. Defaults to 128.
+            output_dim (int, optional): The number of output classes. Defaults to 11 for 0-10 sentiment classification.
+        """
+        super(MovieReviewNN, self).__init__()
+        self.embedding = torch.nn.Embedding(input_dim, 128)  # Embedding layer for word indices
+        self.lstm1 = torch.nn.LSTM(128, hidden_dim)
+        self.lstm2 = torch.nn.LSTM(hidden_dim, hidden_dim // 2)
+        self.fc = torch.nn.Linear(hidden_dim // 2, output_dim)  # Output layer for classification
+
+    def forward(self, x):
+        x = self.embedding(x)
+        x, _ = self.lstm1(x)
+        x, (hn, cn) = self.lstm2(x)
+        x = self.fc(hn[-1])
+        return x
+    
 class MovieReview:
     def __init__(self):
         self.bag_of_words = BagOfWords(extra_stopwords=["movie", "film", "br", "one"])
         self.model = None
 
-    def fit(self, use_saved_model: bool = True) -> None:
-        """Fits the model on the training data"""
-        if not os.path.exists("train_pos.csv") or not os.path.exists("train_neg.csv"):
-            self._download_imdb_data()
-            self._create_imdb_csv()
-            self._create_bag_of_words()
-
-        if use_saved_model and os.path.exists("trained_model.keras"):
-            self.model = tf.keras.models.load_model("trained_model.keras")
+    def fit(self, train_loader: torch.utils.data.DataLoader, num_epochs: int = 10, use_saved_model: bool = True) -> None:
+        """Fits the model on the training data
+        Args:
+            train_loader (DataLoader): DataLoader for the training data
+            num_epochs (int): Number of epochs to train the model
+            use_saved_model (bool): Whether to use a saved model if available
+        """
+        # Check if a saved model exists and load it
+        if use_saved_model and os.path.exists("trained_model.pth"):
+            self.model = MovieReviewNN(input_dim=self.bag_of_words.vocabulary_size)
+            self.model.load_state_dict(torch.load("trained_model.pth"))
             return
+        else:
+            self.model = MovieReviewNN(input_dim=self.bag_of_words.vocabulary_size)
+            self.model.train()
 
-        train_data = pd.concat(
-            [
-                pd.read_csv("train_pos.csv", encoding="utf-8", header=0),
-                pd.read_csv("train_neg.csv", encoding="utf-8", header=0)
-            ]
-        )
-        
-        train_target_tensor = tf.convert_to_tensor(train_data["target"].values, dtype=tf.int32)
+        criterion = torch.nn.CrossEntropyLoss()  # Loss function for multi-class classification
+        optimizer = torch.optim.Adam(self.model.parameters(), lr=0.001)  # Optimizer for training
 
-        train_content_tensor = self.bag_of_words.bag(train_data["content"].values)
+        for epoch in range(num_epochs):
+            running_loss = 0.0
+            for batch_idx, (inputs, targets) in enumerate(train_loader):
 
-        print(train_content_tensor)
-        return
-        # vectorize_layer = tf.keras.layers.TextVectorization(
-        #     max_tokens=1000,
-        #     output_mode='int',
-        #     output_sequence_length=30
-        # )
-        # vectorize_layer.adapt(train_data['content'].values)
-        # train_content_tensor = vectorize_layer(train_data['content'].values)
-        # train_dataset = tf.data.Dataset.from_tensor_slices((train_content_tensor, train_target_tensor))
-        # train_dataset = train_dataset.shuffle(buffer_size=len(train_data)).batch(32)
+                print('inputs shape', inputs.shape, 'targets shape', targets.shape)  # Debugging: print input and target shapes
+               
+                # Forward pass
+                outputs = self.model(inputs)
+                print('outputs shape', outputs.shape)  # Debugging: print output shape
+                print('outputs flattened', outputs.flatten().shape)  # Debugging: print flattened output shape
 
-        model = tf.keras.Sequential(
-            [
-            tf.keras.layers.Embedding(
-                input_dim=vectorize_layer.vocabulary_size(),
-                output_dim=128,
-                mask_zero=True,
-            ),
-            tf.keras.layers.LSTM(128, return_sequences=True),
-            tf.keras.layers.LSTM(64),
-            tf.keras.layers.Dense(11, activation="softmax"),
-            ]
-        )
+                ### This is where the error occurs ###
+                ### Expected input batch_size (200) to match target batch_size (100) ###
+                loss = criterion(outputs, targets)
+                running_loss += loss.item() * inputs.size(0)
 
-        model.compile(
-            loss="sparse_categorical_crossentropy", optimizer="adam", metrics=["accuracy"]
-        )
-        model.fit(
-            train_dataset,
-            epochs=10,
-            batch_size=32,
-            shuffle=True,
-            verbose=2,
-            callbacks=[tf.keras.callbacks.EarlyStopping(patience=3)],
-        )
-        model.save("trained_model.keras")
-        self.model = model
+                # Backward pass and optimization
+                self.model.zero_grad()
+                loss.backward()
+                optimizer.step()
 
-    def predict(self, text: str) -> int:
-        """Predicts the sentiment of the given text
+                if (batch_idx + 1) % 100 == 0:  # Print loss every 100 batches
+                    epoch_loss = running_loss / len(train_loader.dataset)
+                    print(f"Epoch: {epoch + 1}, Batch: {batch_idx + 1}, Loss: {epoch_loss:.2f}")
+                    running_loss = 0.0
+
+        torch.save(self.model.state_dict(), "trained_model.pth")  # Save the trained model state
+
+    def predict_text(self, test_text: str) -> int:
+        """Predicts the sentiment of a single text input
         Args:
             text (str): The text to predict the sentiment for
         Returns:
@@ -83,12 +90,82 @@ class MovieReview:
         if self.model is None:
             raise ValueError("Model has not been trained yet. Call fit() first.")
 
-        bag_of_words = self.bag_of_words.bag(text)
+        self.model.eval()
+        with torch.no_grad():
+            outputs = self.model(torch.tensor(self.bag_of_words.bag([test_text])[0])).unsqueeze(0).float()
+            predicted_class = torch.argmax(outputs, dim=1).item()
+        
+        return predicted_class  # Return the predicted class index (0-10)
 
-        prediction = self.model.predict(bag_of_words)
-        return prediction
+    def predict_loader(self, test_loader: torch.utils.data.DataLoader) -> None:
+        """Measures model accuracy using test data
+        Args:
+            test_loader (DataLoader): DataLoader containing the test data
+        """
+        if self.model is None:
+            raise ValueError("Model has not been trained yet. Call fit() first.")
 
-    def _create_bag_of_words(self) -> None:
+        self.model.eval()
+
+        correct = 0
+        total = 0
+        for inputs, targets in test_loader:
+            outputs = self.model(inputs)
+            predicted = torch.argmax(outputs, dim=1).unsqueeze(0).float()
+            true_labels = torch.argmax(targets, dim=0)
+            print(f"Predicted: {predicted.tolist()}")
+            print(f"True Labels: {true_labels.tolist()}")
+            total += true_labels
+            correct += (predicted == true_labels).sum().item()
+
+        accuracy = correct / total
+        print(f"Accuracy: {accuracy:.2f}%")
+
+    def preprocess_data(self) -> tuple[torch.utils.data.TensorDataset, torch.utils.data.TensorDataset, int]:
+        """Preprocesses the data for training and testing
+        Returns:
+            tuple: A tuple containing the train and test datasets, and the input dimension
+        """
+        if not os.path.exists("train_pos.csv") or not os.path.exists("train_neg.csv"):
+            self._download_imdb_data()
+            self._create_imdb_csv()
+
+        # Load the data from CSV files
+        train_df = pd.concat(
+            [
+                pd.read_csv("train_pos.csv", encoding="utf-8"), 
+                pd.read_csv("train_neg.csv", encoding="utf-8")
+            ], 
+            ignore_index=True
+        )
+        test_df = pd.concat(
+            [
+                pd.read_csv("test_pos.csv", encoding="utf-8"), 
+                pd.read_csv("test_neg.csv", encoding="utf-8")
+            ], 
+            ignore_index=True
+        )
+
+        train_df = train_df.sample(frac=1).reset_index(drop=True)  # Shuffle the training data
+        test_df = test_df.sample(frac=1).reset_index(drop=True)  # Shuffle the test data
+
+        self.create_bag_of_words()
+
+        # Convert to tensor datasets
+        X_train = torch.tensor(self.bag_of_words.bag(train_df["content"].tolist()))
+        y_train = torch.tensor(train_df["target"].values)
+        X_test = torch.tensor(self.bag_of_words.bag(test_df["content"].tolist()))
+        y_test = torch.tensor(test_df["target"].values)
+
+        print('X_train shape', X_train.shape, 'y_train shape', y_train.shape)  # Debugging: print shapes of tensors
+        print('X_test shape', X_test.shape, 'y_test shape', y_test.shape)  # Debugging: print shapes of tensors
+
+        train_dataset = torch.utils.data.TensorDataset(X_train, y_train)
+        test_dataset = torch.utils.data.TensorDataset(X_test, y_test)
+
+        return train_dataset, test_dataset, self.bag_of_words.vocabulary_size
+
+    def create_bag_of_words(self) -> None:
         """Creates a bag of words from the training data
         Args:
             percentage (float): Percentage of the training data to use for creating the bag of words
@@ -216,7 +293,12 @@ class MovieReview:
 
 if __name__ == "__main__":
     movie_review = MovieReview()
-    movie_review.fit()
-    # p = movie_review.predict("This movie was fantastic! I loved it.")
-    # print(p)
-    # print(movie_review.bag_of_words.empty())  # Should return an empty dictionary
+    train_dataset, test_dataset, input_dim = movie_review.preprocess_data()
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=100, shuffle=True)
+    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=100, shuffle=False)
+    movie_review.fit(train_loader)
+
+    text = "This movie was great! I loved it."
+    p = movie_review.predict_text(test_text=text)
+    print(f"Predicted sentiment for the text: {text} is {p}")
+    # movie_review.predict_loader(test_loader)
