@@ -184,12 +184,14 @@ class MovieReview:
         Args:
             percentage (float): Percentage of the training data to use for creating the bag of words
         """
-        if os.path.exists("train_pos.csv"):
-            df = pd.read_csv("train_pos.csv", encoding="utf-8")
-            self.bag_of_words.adapt(df["content"])
-
-        if os.path.exists("train_neg.csv"):
-            df = pd.read_csv("train_neg.csv", encoding="utf-8")
+        if os.path.exists("train_pos.csv") and os.path.exists("train_neg.csv"):
+            df = pd.concat(
+                [
+                    pd.read_csv("train_pos.csv", encoding="utf-8"), 
+                    pd.read_csv("train_neg.csv", encoding="utf-8")
+                ],
+                ignore_index=True
+            )
             self.bag_of_words.adapt(df["content"])
 
     def _download_imdb_data(self, dir_dest_path: str = "aclImdb") -> None:
