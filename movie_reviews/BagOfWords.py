@@ -2,9 +2,10 @@ from nltk.corpus import stopwords
 import pandas as pd
 import string
 import re
+import os
 
 class BagOfWords:
-    def __init__(self, vocabulary_size: int = 1000, output_sequence_length: int = 200, extra_stopwords: list = []):
+    def __init__(self, vocabulary_size: int = 10000, output_sequence_length: int = 200, extra_stopwords: list = []):
         """Initializes the BagOfWords object
         Args:
             max_tokens (int): Maximum vocabulary size
@@ -28,6 +29,13 @@ class BagOfWords:
                     continue
 
                 self.vocabulary[word] = self.vocabulary.get(word, 0) + 1
+        
+        self.vocabulary = dict(sorted(self.vocabulary.items(), key=lambda item: item[1], reverse=True)[:self.vocabulary_size])
+        self.vocabulary = dict([(word, index) for index, word in enumerate(self.vocabulary.keys())])
+        vocab = list(self.vocabulary.keys())
+        with open("vocabulary.txt", "w", encoding="utf-8") as file:
+            for word in vocab:
+                file.write(word + "\n")
 
     def bag(self, data: list) -> list[list[int]]:
         """Transforms text into integer sequences.
@@ -42,18 +50,22 @@ class BagOfWords:
                 the presence (1) or absence (0) of vocabulary words in the corresponding input text.
         """
         # Sort the vocabulary by frequency in descending order and limit to vocabulary_size
-        sorted_vocabulary = dict(sorted(self.vocabulary.items(), key=lambda item: item[1], reverse=True)[:self.vocabulary_size])
+        vocab = []
+        with open("vocabulary.txt", "r", encoding="utf-8") as file:
+            vocab = file.read()
+        
+        vocab = vocab.split("\n")
+
         bag_of_words = []
 
         for text in data:
-            bag = [0] * len(sorted_vocabulary)
-            vocab_words = list(sorted_vocabulary.keys())
+            bag = [0] * len(vocab)
             tokens = self._tokenize(text)
 
             for word in tokens:
-                word_index = vocab_words.index(word) if word in vocab_words else None
-                if word_index:
-                    bag[word_index] = 1
+                if word in vocab:
+                    print(vocab[word])
+                    bag[vocab[word]] = 1
 
             bag_of_words.append(bag)
 
