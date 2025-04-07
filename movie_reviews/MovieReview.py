@@ -8,12 +8,13 @@ from BagOfWords import BagOfWords
 import torch
 
 class MovieReviewNN(torch.nn.Module):
-    def __init__(self, input_dim, hidden_dim=128, output_dim=10):
+    def __init__(self, input_dim, hidden_dim=128, output_dim=11):
         """Initialized Movie Review Neural Network
         Args:
             input_dim (int): The size of the input vocabulary
             hidden_dim (int, optional): The number of hidden units in the LSTM layers. Defaults to 128.
-            output_dim (int, optional): The number of output classes. Defaults to 10 sentiment classes.
+            output_dim (int, optional): The number of output classes. Defaults to 11 for 0-10 sentiment classes.
+                0 isn't a sentiment rating, but it
         """
         super(MovieReviewNN, self).__init__()
         self.embedding = torch.nn.Embedding(input_dim, 128)  # Embedding layer for word indices
@@ -24,10 +25,10 @@ class MovieReviewNN(torch.nn.Module):
     def forward(self, x):
         x = self.embedding(x)
         x, _ = self.lstm1(x)
-        print('x shape after lstm1', x.shape)  # Debugging: print shape after first LSTM
+        # print('x shape after lstm1', x.shape)  # Debugging: print shape after first LSTM
         x, (hn, cn) = self.lstm2(x)
-        print('hn shape', hn.shape)  # Debugging: print hidden state shape
-        print('cn shape', cn.shape)  # Debugging: print cell state shape
+        # print('hn shape', hn.shape)  # Debugging: print hidden state shape
+        # print('cn shape', cn.shape)  # Debugging: print cell state shape
         x = self.fc(hn[-1])
         return x
     
@@ -59,11 +60,11 @@ class MovieReview:
         for epoch in range(num_epochs):
             running_loss = 0.0
             for batch_idx, (inputs, targets) in enumerate(train_loader):
-                print('inputs shape', inputs.shape, 'targets shape', targets.shape)  # Debugging: print input and target shapes
+                # print('inputs shape', inputs.shape, 'targets shape', targets.shape)  # Debugging: print input and target shapes
                
                 # Forward pass
                 outputs = self.model(inputs)
-                print('outputs shape', outputs.shape)  # Debugging: print output shape
+                # print('outputs shape', outputs.shape)  # Debugging: print output shape
 
                 ### This is where the error occurs ###
                 ### Expected input batch_size (200) to match target batch_size (100) ###
@@ -171,8 +172,8 @@ class MovieReview:
         #     ...
         # ]
         # y_train is [25000] (num of reviews)
-        print('X_train shape', X_train.shape, 'y_train shape', y_train.shape)  # Debugging: print shapes of tensors
-        print('X_test shape', X_test.shape, 'y_test shape', y_test.shape)  # Debugging: print shapes of tensors
+        # print('X_train shape', X_train.shape, 'y_train shape', y_train.shape)  # Debugging: print shapes of tensors
+        # print('X_test shape', X_test.shape, 'y_test shape', y_test.shape)  # Debugging: print shapes of tensors
 
         train_dataset = torch.utils.data.TensorDataset(X_train, y_train)
         test_dataset = torch.utils.data.TensorDataset(X_test, y_test)
@@ -192,6 +193,7 @@ class MovieReview:
                 ],
                 ignore_index=True
             )
+            df = df.sample(frac=0.2).reset_index(drop=True)  # Shuffle the data
             self.bag_of_words.adapt(df["content"])
 
     def _download_imdb_data(self, dir_dest_path: str = "aclImdb") -> None:
@@ -310,8 +312,8 @@ class MovieReview:
 if __name__ == "__main__":
     movie_review = MovieReview()
     train_dataset, test_dataset = movie_review.preprocess_data()
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=100, shuffle=True)
-    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=100, shuffle=False)
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=1000, shuffle=True)
+    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=1000, shuffle=False)
     movie_review.fit(train_loader)
 
     text = "This movie was great! I loved it."
