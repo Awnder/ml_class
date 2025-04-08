@@ -54,6 +54,7 @@ class BagOfWords:
 
             for word in tokens:
                 if word in word_to_index:
+                    print(f"Word: {word}, Index: {word_to_index[word]}")
                     bag[word_to_index[word]] += 1 # frequency based bag of words
 
             bag_of_words.append(bag)
