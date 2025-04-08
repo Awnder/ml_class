@@ -25,17 +25,14 @@ class MovieReviewNN(torch.nn.Module):
     def forward(self, x):
         x = self.embedding(x)
         x, _ = self.lstm1(x)
-        # print('x shape after lstm1', x.shape)  # Debugging: print shape after first LSTM
         x, (hn, cn) = self.lstm2(x)
-        # print('hn shape', hn.shape)  # Debugging: print hidden state shape
-        # print('cn shape', cn.shape)  # Debugging: print cell state shape
         x = self.fc(hn[-1])
         return x
     
 class MovieReview:
     def __init__(self):
         """Initialized Movie Review Class with a Bag of Words and a neural network"""
-        self.bag_of_words = BagOfWords(extra_stopwords=["movie", "film", "br", "one"])
+        self.bag_of_words = BagOfWords(vocabulary_size=1000, extra_stopwords=["movie", "film", "br", "one"])
         self.model = None
 
     def fit(self, train_loader: torch.utils.data.DataLoader, num_epochs: int = 10, use_saved_model: bool = True) -> None:
@@ -60,11 +57,11 @@ class MovieReview:
         for epoch in range(num_epochs):
             running_loss = 0.0
             for batch_idx, (inputs, targets) in enumerate(train_loader):
-                # print('inputs shape', inputs.shape, 'targets shape', targets.shape)  # Debugging: print input and target shapes
+                print('inputs shape', inputs.shape, 'targets shape', targets.shape)  # Debugging: print input and target shapes
                
                 # Forward pass
                 outputs = self.model(inputs)
-                # print('outputs shape', outputs.shape)  # Debugging: print output shape
+                print('outputs shape', outputs.shape)  # Debugging: print output shape
 
                 ### This is where the error occurs ###
                 ### Expected input batch_size (200) to match target batch_size (100) ###
@@ -149,9 +146,6 @@ class MovieReview:
             ignore_index=True
         )
 
-        train_df = train_df.sample(frac=1).reset_index(drop=True)  # Shuffle the training data
-        test_df = test_df.sample(frac=1).reset_index(drop=True)  # Shuffle the test data
-
         self.create_bag_of_words()
 
         # Convert to tensor datasets
@@ -159,21 +153,6 @@ class MovieReview:
         y_train = torch.tensor(train_df["target"].values)
         X_test = torch.tensor(self.bag_of_words.bag(test_df["content"].tolist()))
         y_test = torch.tensor(test_df["target"].values)
-
-        # training is [25000, 200] (num of reviews, bag_of_words.output_sequence_length)
-        # looks like strings converted to bag_of_words list of 0/1 
-        # [
-        #     "this movie was great",
-        #     "i hated it",
-        #     ...
-        # [
-        #     [0, 0, 0, 1, 0, ...],
-        #     [0, 1, 0, 0, 0, ...],
-        #     ...
-        # ]
-        # y_train is [25000] (num of reviews)
-        # print('X_train shape', X_train.shape, 'y_train shape', y_train.shape)  # Debugging: print shapes of tensors
-        # print('X_test shape', X_test.shape, 'y_test shape', y_test.shape)  # Debugging: print shapes of tensors
 
         train_dataset = torch.utils.data.TensorDataset(X_train, y_train)
         test_dataset = torch.utils.data.TensorDataset(X_test, y_test)
@@ -185,6 +164,7 @@ class MovieReview:
         Args:
             percentage (float): Percentage of the training data to use for creating the bag of words
         """
+        df = None
         if os.path.exists("train_pos.csv") and os.path.exists("train_neg.csv"):
             df = pd.concat(
                 [
@@ -193,8 +173,8 @@ class MovieReview:
                 ],
                 ignore_index=True
             )
-            df = df.sample(frac=0.2).reset_index(drop=True)  # Shuffle the data
-            self.bag_of_words.adapt(df["content"])
+
+        self.bag_of_words.adapt(df["content"])
 
     def _download_imdb_data(self, dir_dest_path: str = "aclImdb") -> None:
         """Downloads and extracts Imdb data
@@ -312,11 +292,12 @@ class MovieReview:
 if __name__ == "__main__":
     movie_review = MovieReview()
     train_dataset, test_dataset = movie_review.preprocess_data()
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=1000, shuffle=True)
-    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=1000, shuffle=False)
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=1000, shuffle=True, drop_last=True)
+    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=1000, shuffle=False, drop_last=True)
     movie_review.fit(train_loader)
 
     text = "This movie was great! I loved it."
+    # text = "I hated this movie. It was terrible."
     p = movie_review.predict_text(test_text=text)
     print(f"Predicted sentiment for the text: {text} is {p}")
     # movie_review.predict_loader(test_loader)
