@@ -8,25 +8,26 @@ from BagOfWords import BagOfWords
 import torch
 
 class MovieReviewNN(torch.nn.Module):
-    def __init__(self, input_dim, hidden_dim=128, output_dim=11):
+    def __init__(self, input_dim, hidden_dim=128):
         """Initialized Movie Review Neural Network
         Args:
             input_dim (int): The size of the input vocabulary
             hidden_dim (int, optional): The number of hidden units in the LSTM layers. Defaults to 128.
-            output_dim (int, optional): The number of output classes. Defaults to 11 for 0-10 sentiment classes.
-                0 isn't a sentiment rating, but it
+            output_dim (int, optional): The number of output classes. Defaults to 1 for binary classification.
         """
         super(MovieReviewNN, self).__init__()
         self.embedding = torch.nn.Embedding(input_dim, 128)  # Embedding layer for word indices
-        self.lstm1 = torch.nn.LSTM(128, hidden_dim)
+        self.lstm1 = torch.nn.LSTM(128, hidden_dim) 
         self.lstm2 = torch.nn.LSTM(hidden_dim, hidden_dim // 2)
-        self.fc = torch.nn.Linear(hidden_dim // 2, output_dim)  # Output layer for classification
+        self.fc = torch.nn.Linear(hidden_dim // 2, 1)  # binary output layer 0/neg or 1/pos
+        self.sigmoid = torch.nn.Sigmoid()  # Sigmoid activation for binary classification
 
     def forward(self, x):
         x = self.embedding(x)
         x, _ = self.lstm1(x)
         x, (hn, cn) = self.lstm2(x)
         x = self.fc(hn[-1])
+        x = self.sigmoid(x)
         return x
     
 class MovieReview:
@@ -51,21 +52,15 @@ class MovieReview:
             self.model = MovieReviewNN(input_dim=self.bag_of_words.vocabulary_size)
             self.model.train()
 
-        criterion = torch.nn.CrossEntropyLoss()  # Loss function for multi-class classification
-        optimizer = torch.optim.Adam(self.model.parameters(), lr=0.001)  # Optimizer for training
+        criterion = torch.nn.BCELoss()
+        optimizer = torch.optim.Adam(self.model.parameters(), lr=0.01)  # Optimizer for training
 
         for epoch in range(num_epochs):
             running_loss = 0.0
             for batch_idx, (inputs, targets) in enumerate(train_loader):
-                print('inputs shape', inputs.shape, 'targets shape', targets.shape)  # Debugging: print input and target shapes
-               
                 # Forward pass
                 outputs = self.model(inputs)
-                print('outputs shape', outputs.shape)  # Debugging: print output shape
-
-                ### This is where the error occurs ###
-                ### Expected input batch_size (200) to match target batch_size (100) ###
-                loss = criterion(outputs, targets)
+                loss = criterion(outputs.squeeze(), targets.float())
                 running_loss += loss.item() * inputs.size(0)
 
                 # Backward pass and optimization
@@ -73,10 +68,7 @@ class MovieReview:
                 loss.backward()
                 optimizer.step()
 
-                if (batch_idx + 1) % 100 == 0:  # Print loss every 100 batches
-                    epoch_loss = running_loss / len(train_loader.dataset)
-                    print(f"Epoch: {epoch + 1}, Batch: {batch_idx + 1}, Loss: {epoch_loss:.2f}")
-                    running_loss = 0.0
+                print(f"Epoch: {epoch + 1}, Batch: {batch_idx + 1}, Loss: {running_loss / len(train_loader):.2f}")  # Print loss for each batch
 
         torch.save(self.model.state_dict(), "trained_model.pth")  # Save the trained model state
 
@@ -85,17 +77,25 @@ class MovieReview:
         Args:
             test_text (str): The text to predict sentiment for
         Returns:
-            int: The predicted sentiment class (0-10)
+            int: The predicted sentiment class 0 or 1
         """
         if self.model is None:
             raise ValueError("Model has not been trained yet. Call fit() first.")
 
         self.model.eval()
         with torch.no_grad():
-            outputs = self.model(torch.tensor(self.bag_of_words.bag([test_text])[0])).unsqueeze(0).float()
-            predicted_class = torch.argmax(outputs, dim=1).item()
+            bag_of_words = self.bag_of_words.bag([test_text])
+            print('bag_of_words',bag_of_words)
+            bag_of_words = torch.tensor(bag_of_words[0])
+            print('bag_of_words tensor',bag_of_words)
+            outputs = self.model(bag_of_words)
+            print('outputs',outputs)
+            outputs = (outputs > 0.5).float()  # Convert probabilities to binary class labels
+            print('binary class',outputs)
+            predicted_class = outputs.item()
+            print(f"Predicted class: {predicted_class}")  # Print the predicted class
         
-        return predicted_class  # Return the predicted class index (0-10)
+        return predicted_class
 
     def predict_loader(self, test_loader: torch.utils.data.DataLoader) -> None:
         """Measures model accuracy using test data
@@ -147,6 +147,10 @@ class MovieReview:
         )
 
         self.create_bag_of_words()
+
+        # set target to 0 or 1 for positive or negative review
+        train_df["target"] = train_df["target"].apply(lambda x: 1 if x >= 5 else 0)
+        test_df["target"] = test_df["target"].apply(lambda x: 1 if x >= 5 else 0)
 
         # Convert to tensor datasets
         X_train = torch.tensor(self.bag_of_words.bag(train_df["content"].tolist()))
@@ -294,10 +298,10 @@ if __name__ == "__main__":
     train_dataset, test_dataset = movie_review.preprocess_data()
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=1000, shuffle=True, drop_last=True)
     test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=1000, shuffle=False, drop_last=True)
-    movie_review.fit(train_loader)
+    movie_review.fit(train_loader, num_epochs=2)
 
-    text = "This movie was great! I loved it."
-    # text = "I hated this movie. It was terrible."
+    # text = "This movie was great! I loved it."
+    text = "I hated bad worst. ruin terrible."
     p = movie_review.predict_text(test_text=text)
     print(f"Predicted sentiment for the text: {text} is {p}")
     # movie_review.predict_loader(test_loader)
