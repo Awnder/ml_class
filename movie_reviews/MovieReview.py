@@ -16,18 +16,24 @@ class MovieReviewNN(torch.nn.Module):
             output_dim (int, optional): The number of output classes. Defaults to 1 for binary classification.
         """
         super(MovieReviewNN, self).__init__()
-        self.embedding = torch.nn.Embedding(input_dim, 128)  # Embedding layer for word indices
-        self.lstm1 = torch.nn.LSTM(128, hidden_dim) 
-        self.lstm2 = torch.nn.LSTM(hidden_dim, hidden_dim // 2)
-        self.fc = torch.nn.Linear(hidden_dim // 2, 1)  # binary output layer 0/neg or 1/pos
+        self.fc1 = torch.nn.Linear(input_dim, hidden_dim // 2)
+        self.fc2 = torch.nn.Linear(hidden_dim // 2, 1)
         self.sigmoid = torch.nn.Sigmoid()  # Sigmoid activation for binary classification
+        # self.embedding = torch.nn.Embedding(input_dim, 128)  # Embedding layer for word indices
+        # self.lstm1 = torch.nn.LSTM(128, hidden_dim) 
+        # self.lstm2 = torch.nn.LSTM(hidden_dim, hidden_dim // 2)
+        # self.fc = torch.nn.Linear(hidden_dim // 2, 1)  # binary output layer 0/neg or 1/pos
 
     def forward(self, x):
-        x = self.embedding(x)
-        x, _ = self.lstm1(x)
-        x, (hn, cn) = self.lstm2(x)
-        x = self.fc(hn[-1])
+        x = self.fc1(x)
+        x = torch.nn.functional.relu(x)
+        x = self.fc2(x)
+        x = torch.nn.functional.relu(x)
         x = self.sigmoid(x)
+        # x = self.embedding(x)
+        # x, _ = self.lstm1(x)
+        # x, (hn, cn) = self.lstm2(x)
+        # x = self.fc(hn[-1])
         return x
     
 class MovieReview:
@@ -52,16 +58,22 @@ class MovieReview:
             self.model = MovieReviewNN(input_dim=self.bag_of_words.vocabulary_size)
             self.model.train()
 
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.model.to(device)
+
         criterion = torch.nn.BCELoss()
         optimizer = torch.optim.Adam(self.model.parameters(), lr=0.01)  # Optimizer for training
 
         for epoch in range(num_epochs):
             running_loss = 0.0
             for batch_idx, (inputs, targets) in enumerate(train_loader):
+                inputs, targets = inputs.float().to(device), targets.float().to(device)  # Move data to GPU if available
+
                 # Forward pass
                 outputs = self.model(inputs)
-                loss = criterion(outputs.squeeze(), targets.float())
-                running_loss += loss.item() * inputs.size(0)
+                # loss = criterion(outputs.squeeze(), targets.float())
+                loss = criterion(outputs.squeeze(), targets)
+                running_loss += loss * inputs.size(0)
 
                 # Backward pass and optimization
                 self.model.zero_grad()
@@ -72,7 +84,7 @@ class MovieReview:
 
         torch.save(self.model.state_dict(), "trained_model.pth")  # Save the trained model state
 
-    def predict_text(self, test_text: str) -> int:
+    def predict_text(self, test_text: str) -> torch.tensor:
         """Predicts the sentiment of a single text input
         Args:
             test_text (str): The text to predict sentiment for
@@ -83,19 +95,13 @@ class MovieReview:
             raise ValueError("Model has not been trained yet. Call fit() first.")
 
         self.model.eval()
+
         with torch.no_grad():
-            bag_of_words = self.bag_of_words.bag([test_text])
-            print('bag_of_words',bag_of_words)
-            bag_of_words = torch.tensor(bag_of_words[0])
-            print('bag_of_words tensor',bag_of_words)
-            outputs = self.model(bag_of_words)
-            print('outputs',outputs)
+            bag_of_words = torch.tensor(self.bag_of_words.bag([test_text])[0])
+            outputs = self.model(bag_of_words.float())
             outputs = (outputs > 0.5).float()  # Convert probabilities to binary class labels
-            print('binary class',outputs)
-            predicted_class = outputs.item()
-            print(f"Predicted class: {predicted_class}")  # Print the predicted class
         
-        return predicted_class
+        return outputs
 
     def predict_loader(self, test_loader: torch.utils.data.DataLoader) -> None:
         """Measures model accuracy using test data
@@ -109,22 +115,25 @@ class MovieReview:
 
         correct = 0
         total = 0
-        for inputs, targets in test_loader:
-            outputs = self.model(inputs)
-            predicted = torch.argmax(outputs, dim=1).unsqueeze(0).float()
-            true_labels = torch.argmax(targets, dim=0)
-            print(f"Predicted: {predicted.tolist()}")
-            print(f"True Labels: {true_labels.tolist()}")
-            total += true_labels
-            correct += (predicted == true_labels).sum().item()
+        with torch.no_grad():
+            for inputs, targets in test_loader:
+                inputs, targets = inputs.float(), targets.float()
+                outputs = self.model(inputs)
+                outputs = (outputs > 0.5)
+                
+                predicted = torch.argmax(outputs, dim=1).unsqueeze(0).float()
+                print(outputs.shape, predicted, targets.shape)
+                true_labels = torch.argmax(targets, dim=0)
+                total += true_labels
+                correct += (predicted == true_labels).sum().item()
 
         accuracy = correct / total
         print(f"Accuracy: {accuracy:.2f}%")
 
-    def preprocess_data(self) -> tuple[torch.utils.data.TensorDataset, torch.utils.data.TensorDataset]:
+    def preprocess_data(self) -> tuple[torch.utils.data.DataLoader, torch.utils.data.DataLoader]:
         """Preprocesses the data for training and testing
         Returns:
-            tuple: A tuple containing the train and test datasets
+            tuple: A tuple containing the train and test dataloaders
         """
         if not os.path.exists("train_pos.csv") or not os.path.exists("train_neg.csv"):
             self._download_imdb_data()
@@ -161,7 +170,22 @@ class MovieReview:
         train_dataset = torch.utils.data.TensorDataset(X_train, y_train)
         test_dataset = torch.utils.data.TensorDataset(X_test, y_test)
 
-        return train_dataset, test_dataset
+        train_loader = torch.utils.data.DataLoader(
+            train_dataset, 
+            batch_size=self.bag_of_words.vocabulary_size, 
+            shuffle=True, 
+            drop_last=True, 
+            pin_memory=True
+        )
+        test_loader = torch.utils.data.DataLoader(
+            test_dataset, 
+            batch_size=self.bag_of_words.vocabulary_size, 
+            shuffle=False, 
+            drop_last=True, 
+            pin_memory=True
+        )
+
+        return train_loader, test_loader
 
     def create_bag_of_words(self) -> None:
         """Creates a bag of words from the training data
@@ -295,13 +319,11 @@ class MovieReview:
 
 if __name__ == "__main__":
     movie_review = MovieReview()
-    train_dataset, test_dataset = movie_review.preprocess_data()
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=1000, shuffle=True, drop_last=True)
-    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=1000, shuffle=False, drop_last=True)
+    train_loader, test_loader = movie_review.preprocess_data()
     movie_review.fit(train_loader, num_epochs=2)
 
-    # text = "This movie was great! I loved it."
-    text = "I hated bad worst. ruin terrible."
-    p = movie_review.predict_text(test_text=text)
-    print(f"Predicted sentiment for the text: {text} is {p}")
-    # movie_review.predict_loader(test_loader)
+    text = "This movie was great! I loved it."
+    # text = "I hated bad worst. ruin terrible."
+    # p = movie_review.predict_text(test_text=text)
+    # print(f"Predicted sentiment for the text: {text} is {p.item()}")
+    movie_review.predict_loader(test_loader)
