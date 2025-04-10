@@ -323,7 +323,9 @@ if __name__ == "__main__":
     movie_review.fit(train_loader, num_epochs=2)
 
     text = "This movie was great! I loved it."
-    # text = "I hated bad worst. ruin terrible."
-    # p = movie_review.predict_text(test_text=text)
-    # print(f"Predicted sentiment for the text: {text} is {p.item()}")
-    movie_review.predict_loader(test_loader)
+    p = movie_review.predict_text(test_text=text)
+    print(f"Predicted sentiment for the text: {text} is {p.item()}")
+    text = "I hated bad worst. ruin terrible."
+    p = movie_review.predict_text(test_text=text)
+    print(f"Predicted sentiment for the text: {text} is {p.item()}")
+    # movie_review.predict_loader(test_loader)
