@@ -19,10 +19,6 @@ class MovieReviewNN(torch.nn.Module):
         self.fc1 = torch.nn.Linear(input_dim, hidden_dim // 2)
         self.fc2 = torch.nn.Linear(hidden_dim // 2, 1)
         self.sigmoid = torch.nn.Sigmoid()  # Sigmoid activation for binary classification
-        # self.embedding = torch.nn.Embedding(input_dim, 128)  # Embedding layer for word indices
-        # self.lstm1 = torch.nn.LSTM(128, hidden_dim) 
-        # self.lstm2 = torch.nn.LSTM(hidden_dim, hidden_dim // 2)
-        # self.fc = torch.nn.Linear(hidden_dim // 2, 1)  # binary output layer 0/neg or 1/pos
 
     def forward(self, x):
         x = self.fc1(x)
@@ -30,10 +26,6 @@ class MovieReviewNN(torch.nn.Module):
         x = self.fc2(x)
         x = torch.nn.functional.relu(x)
         x = self.sigmoid(x)
-        # x = self.embedding(x)
-        # x, _ = self.lstm1(x)
-        # x, (hn, cn) = self.lstm2(x)
-        # x = self.fc(hn[-1])
         return x
     
 class MovieReview:
