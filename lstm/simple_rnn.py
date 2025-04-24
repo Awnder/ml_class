@@ -8,8 +8,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import TensorDataset, DataLoader
 import numpy as np
-from collections import Counter
+from collections import Counter, defaultdict
 import random
+import re
 
 MODEL_FILENAME = 'textgen_lstm.pth'
 SEQUENCE_LENGTH = 5
@@ -66,7 +67,35 @@ def train_model(text_filenames):
     # Tokenize the words and build two important data structures.
     #  1) word2idx: given a word, what is it's index in the vocabulary
     #  2) idx2word: given an index, what is the corresponding word
-    words = full_text.split()
+
+    # split on whitespace and punctuation '(\W)', and reinsert the punctuation '\1' as separate tokens
+    # words = re.sub(r"(\W)", r" \1 ", word).split()
+    #     words = re.sub(r"(\W)(?<![<>])", r" \1 ", word).split() doesn't include <>
+    punctuation = "~!\"#$%&'()*+,-./:;=?@[\\]^_`{|}~" # except <>
+    words = []
+    word = []
+    ignore_special_words = False
+
+    # iterate through each character in the text and build words, which are added to the words list
+    # make punctuation a separate token and ignore special phrases between <>
+    for char in full_text:
+        if char in punctuation and not ignore_special_words: # create a punctuation token
+            if word:
+                words.append(''.join(word))
+                word = []
+            words.append(char)
+        elif char == '<':
+            ignore_special_words = True
+        elif char == '>':
+            ignore_special_words = False
+        elif (char == '\n' or char == ' ') and not ignore_special_words: # create a word token
+            if word:
+                words.append(''.join(word))
+                word = []
+        else:
+            if not ignore_special_words:
+                word.append(char)
+
     word_counts = Counter(words)
     vocab = sorted(word_counts, key=word_counts.get, reverse=True)
     word2idx = {word: idx for idx, word in enumerate(vocab)}
@@ -81,7 +110,7 @@ def train_model(text_filenames):
         seq = words[i-SEQUENCE_LENGTH:i+1]  # includes the label
         sequences.append([word2idx[word] for word in seq])
     print(f'There are {len(sequences)} word sequences of length {SEQUENCE_LENGTH}')
-    print(sequences[:10] + ' ... ' + sequences[-10:])
+    print(f"{sequences[:10]} ... {sequences[-10:]}")
     print(" ".join([idx2word[idx] for idx in sequences[0]]))
 
     # We are training only, no testing
@@ -95,9 +124,7 @@ def train_model(text_filenames):
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
     loss_fn = nn.CrossEntropyLoss()
 
-
-
-    epochs = 100
+    epochs = 50
     for epoch in range(epochs):
         total_loss = 0
         for batch_X, batch_y in loader:
