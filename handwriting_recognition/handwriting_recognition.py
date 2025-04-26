@@ -1,5 +1,6 @@
 import os
 import numpy as np
+import pickle
 import tkinter as tk
 from tkinter import ttk
 from PIL import Image, ImageTk, ImageGrab, ImageOps
@@ -41,13 +42,37 @@ class HandwritingRecognition:
         return X, y
 
     def _train_models(self) -> tuple[RandomForestClassifier, KNeighborsClassifier, LogisticRegression]:
-        """Finds best hyperparameters and trains RandomForest on the MNIST dataset."""
-        rf = RandomForestClassifier(n_estimators=20)
-        rf.fit(self.X, self.y)
-        knn = KNeighborsClassifier(n_neighbors=3)
-        knn.fit(self.X, self.y)
-        lr = LogisticRegression(max_iter=1000)
-        lr.fit(self.X, self.y)
+        """Finds best hyperparameters and trains models on the MNIST dataset.
+        Saves the models to disk if they don't exist.
+        Loads the models from disk if they do exist.
+        """
+        if "rf_model.pkl" in os.listdir():
+            with open("rf_model.pkl", "rb") as f:
+                rf = pickle.load(f)
+        else:
+            rf = RandomForestClassifier(n_estimators=20, max_depth=10, random_state=42)
+            rf.fit(self.X, self.y)
+            with open("rf_model.pkl", "wb") as f:
+                pickle.dump(rf, f)
+
+        if "knn_model.pkl" in os.listdir():
+            with open("knn_model.pkl", "rb") as f:
+                knn = pickle.load(f)
+        else:
+            knn = KNeighborsClassifier(n_neighbors=3)
+            knn.fit(self.X, self.y)
+            with open("knn_model.pkl", "wb") as f:
+                pickle.dump(knn, f)
+
+        if "lr_model.pkl" in os.listdir():
+            with open("lr_model.pkl", "rb") as f:
+                lr = pickle.load(f)
+        else:
+            lr = LogisticRegression(max_iter=1000)
+            lr.fit(self.X, self.y)
+            with open("lr_model.pkl", "wb") as f:
+                pickle.dump(lr, f)
+
         return rf, knn, lr
 
     def canvas_to_array(self, drawspace: tk.Canvas) -> tk.Image:
